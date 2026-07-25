@@ -1,0 +1,106 @@
+\documentclass[10pt, conference]{IEEEtran}
+
+% ---------- Reduce top margin / title block whitespace ----------
+\usepackage[top=0.4in, bottom=0.5in, left=0.55in, right=0.55in]{geometry}
+
+% ---------- Packages ----------
+\usepackage{times}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+
+% Force all body text to pure black
+\color{black}
+
+% ---------- Section formatting (compact, formal) ----------
+\titlespacing*{\section}{0pt}{2pt}{1pt}
+\titlespacing*{\subsection}{0pt}{1pt}{0pt}
+
+\setlength{\parskip}{0pt}
+
+% ---------- Title fields: EDIT PER PAPER ----------
+\newcommand{\paperTitle}{High Performance Cache Replacement Using Re-Reference Interval Prediction (RRIP)}
+\newcommand{\paperAuthors}{Jaleel, Theobald, Steely, Emer}
+\newcommand{\paperVenue}{ISCA 2010}
+
+\begin{document}
+
+\title{\Large\bfseries Paper Review: High Performance Cache Replacement\\Using Re-Reference Interval Prediction (RRIP)}
+
+\author{
+\IEEEauthorblockN{Vedang Kashyap}
+\IEEEauthorblockA{
+\textit{Department of Electronics Engineering (VLSI Design)} \\
+\textit{Vellore Institute of Technology}\\
+Vellore, India}
+}
+
+\maketitle
+
+\begin{center}
+\textit{Reviewing: \paperAuthors, \paperVenue.}
+\end{center}
+\vspace{-8pt}
+
+% ---------- 1. Introduction ----------
+\section{Introduction}
+LRU, the standard LLC replacement policy, always assumes a near-immediate re-reference and therefore fails on workloads with working sets larger than the cache or with scans, i.e., bursts of non-temporal references, letting useful blocks get evicted.
+
+\subsection{Contribution}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item Introduces RRIP: a re-reference prediction counter replacing strict recency, at only 2 bits/block.
+    \item Presents SRRIP, which is scan-resistant, and DRRIP, which is scan- and thrash-resistant via set dueling.
+\end{itemize}
+
+% ---------- 2. Proposal ----------
+\section{Proposal}
+Each block carries an M-bit RRPV counter predicting re-reference distance instead of recency. Victims are chosen as the block with the largest RRPV, aging the set if none is found. SRRIP inserts new blocks at a long, non-maximal RRPV and resets to zero on a hit, which stops scan blocks from evicting reused blocks. DRRIP adds set dueling to dynamically choose between SRRIP and a bimodal insertion variant, BRRIP, gaining thrash-resistance as well.
+
+% ---------- 3. Key Results ----------
+\section{Key Results Achieved}
+% Summarized, not exhaustive. Use a compact list for scannability.
+
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item SRRIP and DRRIP outperform LRU by 4\% and 10\% on average on a single-core, 16-way, 2MB LLC.
+    \item SRRIP and DRRIP outperform LRU by 7\% and 9\% on average across 1001 four-core workload mixes with an 8MB shared LLC.
+    \item RRIP outperforms LFU, the prior state-of-the-art scan-resistant policy, by 2.5\%.
+    \item RRIP requires 2X less hardware than LRU and 2.5X less hardware than LFU.
+\end{itemize}
+
+% ---------- 4. Key Takeaway ----------
+\section{Key Takeaway}
+% At least 2 points, at the idea/philosophical level (not just result restatement).
+
+\begin{enumerate}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item Replacement is fundamentally a prediction problem rather than a bookkeeping problem; recency is only one possible prediction strategy, and LRU is a special case of the broader re-reference interval framework rather than a fixed law.
+    \item Real workloads exhibit mixed access patterns rather than a single dominant pattern, so a policy tuned for only one case, such as recency-friendly, thrashing, or scanning access, will fail on the others; robustness across pattern types matters more than optimizing for any one of them.
+    \item Increasing state granularity from a single bit to a small saturating counter meaningfully improves prediction quality without changing the underlying mechanism, showing that resolution of information can matter as much as the mechanism itself.
+    \item Meaningful performance gains do not require proportionally larger hardware; SRRIP and DRRIP use fewer bits per block than LRU yet outperform it, indicating that how state is used matters more than how much state is stored.
+    \item Adaptivity can be achieved through runtime competition between policies rather than upfront workload classification, and designs that reuse existing hardware structures with minimal change are more likely to see practical adoption than clean-slate redesigns.
+\end{enumerate}
+
+\section{Weakness}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item All missing blocks get the same static long RRPV at insertion; the policy cannot tell which specific block will be reused within a mixed pattern, only which access pattern category is dominant.
+    \item Hit-priority update resets RRPV to zero on any hit, without distinguishing a block that will be reused again from one that received its last hit and is now effectively dead.
+    \item Multi-core support is limited to a single per-thread choice between SRRIP and BRRIP; it does not model asymmetric interference between applications sharing the LLC.
+    \item DRRIP optimizes aggregate miss rate, and the paper itself reports it can hurt an application that is sensitive to a specific frequently reused region, e.g., photoshop.
+    \item Scan-resistance is bounded by Equation 1: sufficiently long scans relative to associativity still saturate RRPVs and defeat protection.
+    \item Aging requires extra state-machine logic beyond simple bit inversion, unlike NRU.
+\end{itemize}
+
+\section{Extension}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item The paper's own summary flags predicting re-reference interval on cache hits, rather than only on misses, as unresolved, since it requires knowing when a block receives its last hit.
+    \item The paper also names combining RRIP with dead-block and last-touch prediction as ongoing work, to identify blocks that will not be reused again after a hit.
+    \item A per-block, application-aware insertion value could replace the single static long RRPV, letting the policy distinguish blocks within the same access pattern rather than only across pattern categories.
+    \item Thread-Aware DRRIP's per-thread duel could be extended to account for asymmetric interference between applications sharing the LLC, rather than treating the shared stream as a single duel outcome.
+    \item Wider RRPV registers trade longer scan-resistance for slower recognition of dead blocks; an adaptive width, rather than a fixed M, could balance this per workload.
+\end{itemize}
+
+% ---------- 7. Reference ----------
+\section{Reference}
+Aaron Jaleel, Kevin B. Theobald, Simon C. Steely Jr., and Joel Emer. \emph{High Performance Cache Replacement Using Re-Reference Interval Prediction (RRIP)}. In Proceedings of the 37th Annual International Symposium on Computer Architecture (ISCA), 2010.
+
+\end{document}

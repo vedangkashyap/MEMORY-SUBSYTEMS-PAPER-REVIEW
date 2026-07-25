@@ -1,0 +1,93 @@
+\documentclass[10pt, conference]{IEEEtran}
+
+% ---------- Reduce top margin / title block whitespace ----------
+\usepackage[top=0.4in, bottom=0.5in, left=0.55in, right=0.55in]{geometry}
+
+% ---------- Packages ----------
+\usepackage{times}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+
+% Force all body text to pure black
+\color{black}
+
+% ---------- Section formatting (compact, formal) ----------
+\titlespacing*{\section}{0pt}{2pt}{1pt}
+\titlespacing*{\subsection}{0pt}{1pt}{0pt}
+
+\setlength{\parskip}{0pt}
+
+% ---------- Title fields: EDIT PER PAPER ----------
+\newcommand{\paperTitle}{SHiP: Signature-based Hit Predictor for High Performance Caching}
+\newcommand{\paperAuthors}{Wu, Jaleel, Hasenplaugh, Martonosi, Steely, Emer}
+\newcommand{\paperVenue}{MICRO 2011}
+
+\begin{document}
+
+\title{\Large\bfseries Paper Review: SHiP: Signature-based Hit\\Predictor for High Performance Caching}
+
+\author{
+\IEEEauthorblockN{Vedang Kashyap}
+\IEEEauthorblockA{
+\textit{Department of Electronics Engineering (VLSI Design)}\\
+\textit{Vellore Institute of Technology, Vellore, India}}
+}
+
+\maketitle
+
+% ---------- 1. Introduction ----------
+\section{Introduction}
+RRIP and its variants improve on LRU by predicting a re-reference interval on cache insertion, but they predict the same interval for most insertions, making a single coarse decision instead of one tailored to each reference.
+
+\subsection{Contribution}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item Introduces signature-based prediction: correlating a cache line's re-reference behavior with a signature, such as memory region, program counter, or instruction sequence history, rather than one static prediction for all insertions.
+    \item Presents SHiP, using a Signature History Counter Table to learn per-signature reuse behavior and predict distant versus intermediate re-reference on insertion.
+\end{itemize}
+
+% ---------- 2. Proposal ----------
+\section{Proposal}
+SHiP predicts a cache line's re-reference interval by correlating it with a signature rather than treating all insertions alike. Each line carries two extra metadata fields: the signature that inserted it, such as a hashed program counter, and a one-bit outcome flag marking whether it has been re-referenced. A Signature History Counter Table of saturating counters is indexed by signature and updated using this metadata: a hit increments the counter for that line's signature, and an eviction without a hit decrements it. On a miss, the incoming line's signature indexes the table to decide the insertion value: a zero counter predicts a distant re-reference, a positive counter predicts an intermediate re-reference. SHiP changes only this insertion value; victim selection and promotion policy are left unchanged, and the paper builds it on top of SRRIP in place of SRRIP's fixed insertion RRPV.
+
+% ---------- 3. Key Results ----------
+\section{Key Results Achieved}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item With a 1MB private LLC, SHiP-PC and SHiP-ISeq improve throughput over LRU by 9.7\% and 9.4\% on average, versus 5.5\% for DRRIP, 5.6\% for Seg-LRU, and 6.9\% for SDBP.
+    \item With a 4MB shared LLC on a 4-core CMP, SHiP-PC and SHiP-ISeq improve throughput over LRU by 11.2\% and 11.0\% on average, versus 6.4\% for DRRIP, 4.1\% for Seg-LRU, and 5.6\% for SDBP.
+    \item SHiP-PC achieves 98\% prediction accuracy for lines predicted distant and 39\% for lines predicted intermediate.
+    \item A reduced design, SHiP-PC-S-R2, retains most performance gains using only 10KB of hardware for a 1MB LLC, close to the 8KB used by plain LRU.
+\end{itemize}
+
+% ---------- 4. Key Takeaway ----------
+\section{Key Takeaway}
+\begin{enumerate}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item A single global prediction rule, however well-tuned, is a coarse approximation; the real source of accuracy is correlating a prediction with the specific context, in this case a signature, that generated the reference, rather than the access pattern as a whole.
+\end{enumerate}
+\pagebreak
+\begin{enumerate}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+\setcounter{enumi}{1}
+    \item Confidence and identity are separable design axes: SHiP does not track individual line reuse directly, it tracks whether a class of references identified by a signature tends to be reused, showing that grouping references by a stable identity can be more learnable than tracking each line's own history.
+    \item Asymmetric mispredictions deserve asymmetric caution: SHiP treats a wrong distant prediction, which risks evicting a useful line, more conservatively than a wrong intermediate prediction, which only risks a missed opportunity, rather than treating all prediction errors as equally costly.
+\end{enumerate}
+
+\section{Weakness}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item The SHCT is trained per signature, so aliasing between unrelated signatures sharing an entry is a real risk; the paper reports this is mostly constructive but explicitly identifies destructive aliasing, up to 18.5\% in some workload mixes, as a source of degraded accuracy.
+    \item Instruction-sequence and program-counter signatures require storing and carrying a signature with every line through the cache hierarchy, which the memory-region signature avoids at the cost of weaker prediction accuracy, so the paper's best-performing signatures are also its most hardware-intensive.
+    \item The per-core private SHCT eliminates cross-core aliasing entirely but reduces gains for SPEC CPU2006 mixes due to per-core warm-up cost, indicating the shared-cache SHCT design does not have a single best configuration across workload types.
+\end{itemize}
+
+\section{Extension}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item The paper itself flags updating re-reference predictions on cache hits, not only on insertion, as future work; a hit could adjust the SHCT entry proportionally rather than only reinforcing the same binary outcome bit.
+    \item Since the three signatures, memory region, program counter, and instruction sequence, each work best on different workload types, an unexplored idea is combining multiple signatures per line and letting the SHCT confidence values vote or blend, rather than committing to one signature scheme per design.
+    \item The paper never revisits a line's signature after insertion even though the same physical line can later be accessed by a different instruction, as shown in its own cross-instruction reuse example; tracking a small history of accessing signatures per line, rather than only the inserting one, is untried and could improve prediction when reuse crosses instructions.
+\end{itemize}
+
+% ---------- 7. Reference ----------
+\section{Reference}
+Carole-Jean Wu, Aamer Jaleel, Will Hasenplaugh, Margaret Martonosi, Simon C. Steely Jr., and Joel Emer. \emph{SHiP: Signature-based Hit Predictor for High Performance Caching}. In Proceedings of the 44th Annual IEEE/ACM International Symposium on Microarchitecture (MICRO), 2011.
+
+\end{document}

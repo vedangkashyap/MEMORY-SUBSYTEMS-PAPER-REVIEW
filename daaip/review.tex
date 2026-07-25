@@ -1,0 +1,91 @@
+\documentclass[10pt, conference]{IEEEtran}
+
+% ---------- Reduce top margin / title block whitespace ----------
+\usepackage[top=0.4in, bottom=0.5in, left=0.55in, right=0.55in]{geometry}
+
+% ---------- Packages ----------
+\usepackage{times}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+
+% Force all body text to pure black
+\color{black}
+
+% ---------- Section formatting (compact, formal) ----------
+\titlespacing*{\section}{0pt}{2pt}{1pt}
+\titlespacing*{\subsection}{0pt}{1pt}{0pt}
+
+\setlength{\parskip}{0pt}
+
+% ---------- Title fields: EDIT PER PAPER ----------
+\newcommand{\paperTitle}{DAAIP: Deadblock Aware Adaptive Insertion Policy for High Performance Caching}
+\newcommand{\paperAuthors}{Newton, Mahto, Pai, Singh}
+\newcommand{\paperVenue}{ICCD 2017}
+
+\begin{document}
+
+\title{\Large\bfseries Paper Review: DAAIP: Deadblock Aware Adaptive\\Insertion Policy for High Performance Caching}
+
+\author{
+\IEEEauthorblockN{Vedang Kashyap}
+\IEEEauthorblockA{
+\textit{Department of Electronics Engineering (VLSI Design)}\\
+\textit{Vellore Institute of Technology, Vellore, India}}
+}
+
+\maketitle
+
+% ---------- 1. Introduction ----------
+\section{Introduction}
+RRIP-based policies like SRRIP and ABRip predict a re-reference interval per block but cannot distinguish a cache-friendly application from a streaming one sharing the same LLC, so streaming blocks get the same long re-reference treatment as cache-friendly blocks in the same cache set.
+
+\subsection{Contribution}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item Shows that a large share of blocks inserted into the LLC, on average 85\%, are never re-referenced before eviction, and that this deadblock percentage stays roughly constant over consecutive phases of an application.
+    \item Proposes DAAIP, which uses per-core deadblock feedback from evicted lines to adaptively choose an insertion position between LRU and one position above LRU.
+\end{itemize}
+
+% ---------- 2. Proposal ----------
+\section{Proposal}
+DAAIP tracks each application's deadblock behavior at runtime to decide where its incoming blocks are inserted. Each block carries a one-bit reuse flag, zero on insertion and set if re-referenced before eviction, plus bits identifying the installing core. Per core, two 16-bit counters track total blocks installed and deadblocks evicted. Every $2^{16}$ misses, the phase's deadblock percentage is compared to a threshold: above it, new blocks go to LRU; otherwise, one position above LRU. Both counters halve at each boundary, weighting recent behavior while keeping some history. Blocks promote to MRU only on re-reference; the scheme replaces SRRIP's insertion step directly.
+
+% ---------- 3. Key Results ----------
+\section{Key Results Achieved}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item DAAIP improves dual-core system throughput over SRRIP by up to 21\% and 5.8\% on average across 39 multiprogrammed workload mixes.
+    \item DAAIP reduces MPKI by up to 22\% on evaluated SPEC CPU2006 benchmarks compared to SRRIP.
+    \item DAAIP outperforms ABRip, a prior application-aware RRIP policy, by 4.6\% on average on system throughput, and unlike ABRip, improves performance for both Cf-Cf and Cf-Str workload mixes.
+    \item Total hardware overhead is approximately 16KB, about 0.0039\% of a 4MB LLC.
+\end{itemize}
+
+% ---------- 4. Key Takeaway ----------
+\section{Key Takeaway}
+\begin{enumerate}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item Feedback from what actually happened to a block, whether it was ever reused before eviction, is a more direct learning signal than any prediction made only at insertion time, since the outcome itself becomes the ground truth the next decision can be tuned against.
+    \item Application-level behavior, not just per-set or per-block behavior, is a meaningful unit to reason about in a shared cache; treating a core's overall reuse tendency as the signal, rather than only local per-set counters as in ABRip, lets one region's behavior inform decisions for the whole core.
+    \item Coarse-grained, low-cost hardware, a single reuse bit and two small counters per core, can capture enough signal to adaptively partition a shared cache without the cost of maintaining full per-application recency state or auxiliary tag directories.
+\end{enumerate}
+
+\section{Weakness}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item DAAIP only chooses between two insertion positions, LRU and one position above LRU, unlike RRIP-style policies that use multiple RRPV levels, so its adaptivity is coarser than the granularity RRIP itself already offers.
+    \item The prose only says counters are halved to retain past behavior, without stating that this halving happens exactly at the phase boundary, so the next phase starts from half the prior evidence rather than zero; this is only clear from Algorithm 1, not the text.
+    \item The paper reports that DAAIP loses performance compared to SRRIP on a few workload mixes, such as gcc-milc against ABRip, but does not explain why the phase-based threshold fails for these specific cases.
+    \item Evaluation is limited to dual-core systems and Cf-Cf or Cf-Str mixes; Str-Str mixes are explicitly excluded and quad-core scalability is left as future work.
+\end{itemize}
+
+\section{Extension}
+\begin{itemize}[leftmargin=*, itemsep=0pt, topsep=1pt, parsep=0pt]
+    \item The paper's own future work names using auxiliary tag directories to dynamically switch between the best-performing policy per workload mix, since DAAIP sometimes underperforms SRRIP, and extending the scheme to quad-core systems.
+    \item DAAIP measures deadblock percentage per core as a whole, but an unexplored idea is measuring it per cache set or per region of the address space within a core, so a core running one cache-friendly and one streaming code region internally could still get differentiated insertion decisions rather than one blended decision for the entire core.
+    \item The phase length is a fixed count of misses decided once at design time; an untried alternative is making the phase length itself adaptive, shortening it when the deadblock percentage is changing rapidly between consecutive phases and lengthening it when the percentage is stable, so the counters halve at a rate matched to how quickly the application's behavior is actually drifting.
+    \item DAAIP's only two insertion positions are LRU and one step above LRU; combining its deadblock feedback with RRIP's multi-level RRPV scale is unexplored and could yield a graded value instead of two fixed points.
+\end{itemize}
+
+% ---------- 7. Reference ----------
+\section{Reference}
+Newton, Sujit Kr Mahto, Suhit Pai, and Virendra Singh. \emph{DAAIP: Deadblock Aware Adaptive Insertion Policy for High Performance Caching}. In Proceedings of the 2017 IEEE 35th International Conference on Computer Design (ICCD), 2017.
+
+\end{document}

@@ -1,0 +1,87 @@
+\documentclass[10pt, conference]{IEEEtran}
+
+% ---------- Reduce top margin / title block whitespace ----------
+\usepackage[top=0.4in, bottom=0.4in, left=0.55in, right=0.55in]{geometry}
+
+% ---------- Packages ----------
+\usepackage{times}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+
+% Force all body text to pure black
+\color{black}
+
+% ---------- Section formatting (compact, formal) ----------
+\titlespacing*{\section}{0pt}{2pt}{1pt}
+\titlespacing*{\subsection}{0pt}{1pt}{0pt}
+
+\setlength{\parskip}{1pt}
+
+% ---------- Title fields: EDIT PER PAPER ----------
+\newcommand{\paperTitle}{Exploiting Page Table Locality for Agile TLB Prefetching}
+\newcommand{\paperAuthors}{Vavouliotis, Alvarez, Karakostas, Nikas, Koziris, Jimenez, Casas}
+\newcommand{\paperVenue}{ISCA 2021}
+
+\begin{document}
+
+\title{\Large\bfseries Paper Review: Exploiting Page Table\\Locality for Agile TLB Prefetching}
+
+\author{
+\IEEEauthorblockN{Vedang Kashyap}
+\IEEEauthorblockA{
+\textit{Department of Electronics Engineering (VLSI Design)}\\
+\textit{Vellore Institute of Technology, Vellore, India}}
+}
+
+\maketitle
+
+% ---------- 1. Introduction ----------
+\section{Introduction}
+Prior TLB prefetchers always trigger a background page walk to fetch a predicted PTE, so an inaccurate prefetch still costs a full memory-hierarchy traversal; none exploit that a page walk already returns a full cache line of adjacent PTEs for free, and no single prefetcher performs best across all workloads.
+
+\subsection{Contribution}
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt, parsep=1pt]
+    \item Proposes Sampling-Based Free TLB Prefetching (SBFP), which uses sampling to predict which cache-line-adjacent PTEs fetched for free at the end of a page walk should be placed in the prefetch queue.
+    \item Proposes Agile TLB Prefetcher (ATP), a composite prefetcher combining three low-cost prefetchers with logic that selects among them or disables prefetching per TLB miss.
+\end{itemize}
+
+% ---------- 2. Proposal ----------
+\section{Proposal}
+SBFP exploits that a page walk returns a 64-byte line holding the requested PTE plus 7 free neighbors, each at a distance of -7 to +7 excluding zero. A Free Distance Table of 14 saturating counters tracks each distance's hit rate: a free PTE enters the prefetch queue if its counter exceeds a threshold, else it goes to a Sampler tracking untrusted distances. Counters increment on a hit and decay on saturation, adapting as data structures change. ATP is a decision tree of three low-cost prefetchers, a stride, a two-distance, and a PC-indexed predictor, each with a Fake Prefetch Queue tracking its accuracy without real prefetches. Counters select which prefetcher fires, or none, based on these queues; ATP and SBFP share one prefetch queue.
+
+% ---------- 3. Key Results ----------
+\section{Key Results Achieved}
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt, parsep=1pt]
+    \item Geometric speedup over no prefetching is 16.2\%, 11.1\%, and 11.8\% for Qualcomm, SPEC, and GAP/XSBench workloads, respectively; over the best individual state-of-the-art prefetcher per suite, gains are 8.7\%, 3.4\%, and 4.2\%.
+    \item Page walk memory references drop by 37\%, 26\%, and 5\% for the same three suites; total hardware cost is 1.68KB (ATP) plus 0.31KB (SBFP), with only 1.7-3.6\% of prefetches harmful to the OS page replacement policy.
+\end{itemize}
+
+% ---------- 4. Key Takeaway ----------
+\section{Key Takeaway}
+\begin{enumerate}[leftmargin=*, itemsep=2pt, topsep=2pt, parsep=1pt]
+    \item A resource already paid for should be exploited before spending anything new, but only after measuring confidence in it rather than acting blindly; the 7 neighboring PTEs arrive free from a page walk that already happened, and the Free Distance Table and Fake Prefetch Queues exist purely to test which of them are worth using before committing real prefetch slots.
+    \item No single fixed-feature predictor generalizes across workloads, so building one composite predictor that arbitrates between several narrow, cheap predictors can beat investing in one larger, more general predictor.
+    \item Simulating a decision before committing to it is cheaper than committing and correcting; the Fake Prefetch Queues let every constituent prefetcher's accuracy be tracked concurrently without ever issuing a real, costly prefetch, turning selection into a side effect of ordinary operation rather than a separate probing phase.
+\end{enumerate}
+
+\section{Weakness}
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt, parsep=1pt]
+    \item Several design choices, the generalized Free Distance Table over a per-PC one, the fixed threshold, decay scheme, and counter widths, and ATP's three fixed constituent prefetchers, are all frozen at authoring time for complexity reasons, with no stated mechanism to re-tune or reconfigure them for workloads unlike those evaluated.
+    \item For the GAP and XSBench workloads, ATP with SBFP reduces page walk memory references by only 5\%, far below the 37\% and 26\% seen for Qualcomm and SPEC, indicating the approach is markedly less effective on highly irregular big-data access patterns.
+    \item ATP's throttling and selection logic is driven entirely by predicted-page accuracy in each Fake Prefetch Queue, with no signal for whether a correct prediction actually prevents a future TLB miss versus one that would have hit anyway, so selection optimizes accuracy rather than the metric that matters.
+\end{itemize}
+
+\section{Extension}
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt, parsep=1pt]
+    \item The paper explicitly leaves a per-data-structure Free Distance Table as unexplored beyond a single ideal-case test; a cheaper middle ground, such as a small set of tables selected by a coarse hash of the faulting instruction region rather than a full per-PC table, is untried.
+    \item ATP's decision tree always fires exactly one constituent prefetcher or none; combining SBFP-style confidence counters with ATP's selection logic to allow two constituent prefetchers to fire together when both show high confidence, rather than forcing a single winner, is unexplored and could help on workloads where more than one access feature is present at once.
+    \item Since the Fake Prefetch Queues already track each constituent prefetcher's predicted-page accuracy without real prefetches, the same infrastructure could log whether each fake hit corresponded to a page that would have missed the TLB anyway, giving ATP a truer usefulness signal than accuracy alone, at no added cost.
+\end{itemize}
+
+% ---------- 7. Reference ----------
+\section{Reference}
+Vavouliotis et al., \emph{Exploiting Page Table Locality for Agile TLB Prefetching}, ISCA 2021.
+
+\end{document}
